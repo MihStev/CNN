@@ -1,0 +1,96 @@
+import os
+import shutil
+import random
+from pathlib import Path
+
+# --- KONFIGURACIJA ---
+BASE_DIR = 'dataset'  # Ime tvog glavnog foldera
+CLASSES = ['dog', 'cat', 'wild'] # Proveri da li se folderi tačno ovako zovu!
+TEST_SIZE = 750  # Broj slika za test set (po klasi)
+VAL_SIZE = 750   # Broj slika za validacioni set (po klasi)
+
+def reorganize_dataset():
+    print(f"Počinjem reorganizaciju foldera '{BASE_DIR}'...")
+    
+    for class_name in CLASSES:
+        print(f"\n--- Obrađujem klasu: {class_name} ---")
+        
+        # 1. Definisanje putanja
+        train_path = os.path.join(BASE_DIR, 'train', class_name)
+        val_path = os.path.join(BASE_DIR, 'val', class_name)
+        test_path = os.path.join(BASE_DIR, 'test', class_name)
+        
+        # Kreiraj foldere ako ne postoje
+        os.makedirs(train_path, exist_ok=True)
+        os.makedirs(val_path, exist_ok=True)
+        os.makedirs(test_path, exist_ok=True)
+        
+        # 2. Prikupljanje SVIH slika na jednu gomilu
+        all_files = []
+        
+        # Funkcija za skupljanje slika iz foldera
+        def collect_files(folder_path):
+            files = []
+            if os.path.exists(folder_path):
+                for f in os.listdir(folder_path):
+                    full_path = os.path.join(folder_path, f)
+                    if os.path.isfile(full_path): # Ignoriši podfoldere
+                        files.append(full_path)
+            return files
+
+        all_files.extend(collect_files(train_path))
+        all_files.extend(collect_files(val_path))
+        all_files.extend(collect_files(test_path)) # Za slučaj da skriptu pokreneš 2 puta
+        
+        total_images = len(all_files)
+        print(f"Ukupno pronađeno slika: {total_images}")
+        
+        if total_images == 0:
+            print(f"UPOZORENJE: Nema slika za klasu {class_name}. Preskačem.")
+            continue
+            
+        # 3. Mešanje (Shuffle) - KLJUČNO!
+        random.seed(42) # Da uvek dobijemo isti rezultat ako ponovimo
+        random.shuffle(all_files)
+        
+        # 4. Podela
+        # Prvo uzimamo za test, pa za val, ostatak ide u train
+        test_files = all_files[:TEST_SIZE]
+        val_files = all_files[TEST_SIZE : TEST_SIZE + VAL_SIZE]
+        train_files = all_files[TEST_SIZE + VAL_SIZE :]
+        
+        print(f"Planirana raspodela -> Train: {len(train_files)}, Val: {len(val_files)}, Test: {len(test_files)}")
+        
+        # 5. Fizičko prebacivanje fajlova
+        def move_files_to_folder(file_list, destination_folder):
+            moved_count = 0
+            for src_path in file_list:
+                filename = os.path.basename(src_path)
+                dst_path = os.path.join(destination_folder, filename)
+                
+                # Prebaci samo ako već nije tamo
+                if src_path != dst_path:
+                    try:
+                        shutil.move(src_path, dst_path)
+                        moved_count += 1
+                    except Exception as e:
+                        print(f"Greška pri prebacivanju {filename}: {e}")
+            return moved_count
+
+        print("Prebacujem fajlove...")
+        move_files_to_folder(test_files, test_path)
+        move_files_to_folder(val_files, val_path)
+        move_files_to_folder(train_files, train_path)
+        
+        print(f"Završeno za klasu {class_name}.")
+
+    print("\n========================================")
+    print("REORGANIZACIJA USPEŠNO ZAVRŠENA!")
+    print("========================================")
+
+if __name__ == "__main__":
+    # Provera da li base dir postoji
+    if not os.path.exists(BASE_DIR):
+        print(f"Greška: Folder '{BASE_DIR}' ne postoji na ovoj lokaciji.")
+    else:
+        reorganize_dataset()
