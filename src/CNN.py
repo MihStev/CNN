@@ -1,13 +1,13 @@
 import tensorflow as tf
-from tensorflow.keras import layers, models
+from tensorflow.keras import layers, models, optimizers
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-
+import pandas as pd
 # --- KONFIGURACIJA ---
 BATCH_SIZE = 32
 IMG_SIZE = (128, 128) # Smanjujemo sa 512 na 128
-EPOCHS = 10           # Dovoljno za prvi test
+EPOCHS = 40           # Dovoljno za prvi test
 DATA_DIR = '../dataset'  # Putanja do foldera
 
 print("Učitavam podatke...")
@@ -43,7 +43,7 @@ data_augmentation = tf.keras.Sequential([
     layers.RandomFlip("horizontal"),
     layers.RandomRotation(0.1), # Rotacija do 10% (blago)
     layers.RandomZoom(0.2),     # Zoom do 20% (KLJUČNO za vuka vs psa!)
-    layers.RandomContrast(0.1), # Malo menjamo kontrast
+    layers.RandomContrast(0.2), # Malo menjamo kontrast
 ])
 
 
@@ -53,33 +53,40 @@ model = models.Sequential([
     data_augmentation,
     layers.Rescaling(1./255),
     
-    # Blok 1
-    layers.Conv2D(16, (3, 3), activation='relu'), # Manji broj filtera za početak
+    # --- BLOK 1 ---
+    layers.Conv2D(32, (3, 3), padding='same', activation='relu'),
     layers.MaxPooling2D((2, 2)),
     
-    # Blok 2
-    layers.Conv2D(32, (3, 3), activation='relu'),
+    # --- BLOK 2 ---
+    layers.Conv2D(64, (3, 3), padding='same', activation='relu'),
     layers.MaxPooling2D((2, 2)),
     
-    # Blok 3
-    layers.Conv2D(64, (3, 3), activation='relu'),
+    # --- BLOK 3 ---
+    layers.Conv2D(128, (3, 3), padding='same', activation='relu'),
     layers.MaxPooling2D((2, 2)),
     
-    # Klasifikator
+    layers.Conv2D(256, (3, 3), padding='same', activation='relu'),
+    layers.MaxPooling2D((2, 2)),
+    
+    # --- KLASIFIKATOR ---
     layers.Flatten(),
-    layers.Dense(64, activation='relu'), # Jedan skriveni sloj
-
+    
+    layers.Dense(256, activation='relu'),
+    
     layers.Dropout(0.5),
     
     layers.Dense(3, activation='softmax')
 ])
 
 # Kompilacija
-model.compile(optimizer='adam', # Standardni LR je 0.001
+optimizer = optimizers.Adam(learning_rate=0.0005)
+
+model.compile(optimizer=optimizer,
               loss='sparse_categorical_crossentropy',
               metrics=['accuracy'])
 
 model.summary()
+
 print("\nPočinjem trening...")
 
 early_stopping = tf.keras.callbacks.EarlyStopping(
@@ -161,3 +168,25 @@ for i, (conf, idx) in enumerate(error_confidences[:10]): # Prikazujemo top 10
     plt.axis("off")
 plt.tight_layout()
 plt.show()
+
+
+
+# --- 1. ČUVANJE MODELA ---
+# Najbolji format za novije verzije TensorFlow-a je .keras
+# Čuva sve: slojeve, težine, compile informacije
+model_name = 'finalni_model_4sloja.keras'
+model.save(model_name)
+
+print(f"Model uspešno sačuvan kao: {model_name}")
+
+# --- 2. ČUVANJE ISTORIJE TRENINGA ---
+# History objekat se gubi kad ugasiš Python. Moramo ga sačuvati.
+# Pretvaramo ga u tabelu i čuvamo kao CSV (Excel format)
+history_df = pd.DataFrame(history.history)
+
+# Čuvamo kao CSV fajl
+history_filename = 'istorija_treninga.csv'
+with open(history_filename, mode='w') as f:
+    history_df.to_csv(f)
+
+print(f"Istorija treninga sačuvana kao: {history_filename}")
